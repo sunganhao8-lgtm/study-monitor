@@ -1,0 +1,19 @@
+# =================================================================
+# Study Monitor - 小米摄像头 RTSP 桥接
+# =================================================================
+
+services:
+  # Go2rtc - 流媒体服务器 + 小米摄像头直连
+  go2rtc:
+    container_name: go2rtc
+    image: ghcr.nju.edu.cn/alexxit/go2rtc
+    ports:
+      - "1984:1984"     # WebUI
+      - "8554:8554"     # RTSP
+      - "8555:8555"     # WebRTC
+    privileged: true
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./go2rtc:/config

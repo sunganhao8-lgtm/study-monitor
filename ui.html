@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Study Monitor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #131316;
+    --bg-3: #1c1c20;
+    --border: #2a2a2f;
+    --text: #e5e5e7;
+    --text-2: #9ca3af;
+    --text-3: #6b7280;
+    --accent: #ff5c5c;
+    --accent-2: #ff8a3d;
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --yellow: #eab308;
+    --purple: #a855f7;
+    --red: #ef4444;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .logo-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+  }
+  .status-bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-3);
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .status-dot.running { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 24px;
+  }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2 .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--bg-3);
+    border-radius: 10px;
+    color: var(--text-2);
+    font-weight: 400;
+  }
+
+  /* 当前状态卡片 */
+  .state-display {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  .state-main {
+    text-align: center;
+    padding: 24px 16px;
+    background: var(--bg-3);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .state-emoji { font-size: 64px; line-height: 1; margin-bottom: 8px; }
+  .state-label { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+  .state-meta { color: var(--text-2); font-size: 13px; }
+  .state-confidence {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--green);
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .state-metrics {
+    display: grid;
+    gap: 12px;
+  }
+  .metric {
+    background: var(--bg-3);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .metric-label { color: var(--text-2); font-size: 13px; }
+  .metric-value {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .metric-value.warn { color: var(--yellow); }
+  .metric-value.danger { color: var(--red); }
+
+  /* 按钮 */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-3);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--border); }
+  .btn.primary {
+    background: var(--green);
+    color: #0a0a0b;
+    border-color: var(--green);
+    font-weight: 500;
+  }
+  .btn.primary:hover { background: #16a34a; }
+  .btn.danger {
+    background: var(--red);
+    color: white;
+    border-color: var(--red);
+  }
+  .btn.danger:hover { background: #dc2626; }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  /* 控件 */
+  .control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .control-row:last-child { border-bottom: none; }
+  .control-label {
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .control-info {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-left: 4px;
+  }
+  .switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: var(--bg-3);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: var(--text-2);
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .switch.on { background: var(--green); }
+  .switch.on::after { left: 18px; background: white; }
+
+  .input, .textarea, .select {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border 0.15s;
+  }
+  .input:focus, .textarea:focus, .select:focus { border-color: var(--accent); }
+  .input.small { width: 70px; }
+  .input.medium { width: 110px; }
+  .textarea { width: 100%; resize: vertical; min-height: 60px; }
+
+  .group-title {
+    font-size: 11px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 12px 0 8px;
+    font-weight: 600;
+  }
+
+  /* 日志 */
+  .log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .log-table th {
+    text-align: left;
+    color: var(--text-2);
+    font-weight: 500;
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .log-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+    font-family: "SF Mono", Menlo, monospace;
+  }
+  .log-table tr:hover td { background: var(--bg-3); }
+  .log-time { color: var(--text-3); }
+  .log-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .log-status.studying { background: rgba(34,197,94,0.15); color: var(--green); }
+  .log-status.looking_down { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .log-status.look_away { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .log-status.drowsy { background: rgba(239,68,68,0.15); color: var(--red); }
+  .log-status.sleeping { background: rgba(239,68,68,0.15); color: var(--red); }
+  .log-status.phone { background: rgba(255,138,61,0.15); color: var(--accent-2); }
+  .log-status.idle { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .log-status.moving { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .log-status.away { background: rgba(107,114,128,0.15); color: var(--text-2); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    padding: 12px 16px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 999;
+    animation: slideUp 0.2s ease-out;
+  }
+  .toast.ok { border-color: var(--green); color: var(--green); }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Snapshot */
+  .snapshot {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--bg-3);
+    border-radius: 8px;
+    object-fit: cover;
+    margin-bottom: 0;
+  }
+
+  /* Stats */
+  .stats-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stats-range-info {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .stats-big {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stats-big .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .stats-section {
+    margin-bottom: 18px;
+  }
+  .stats-section-title {
+    font-size: 11px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .stats-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stat-bar {
+    display: grid;
+    grid-template-columns: 100px 1fr 80px;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .stat-bar-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-2);
+  }
+  .stat-bar-track {
+    height: 8px;
+    background: var(--bg-3);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .stat-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .stat-bar-time {
+    color: var(--text-2);
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    text-align: right;
+  }
+  .stats-counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .stat-count {
+    background: var(--bg-3);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .stat-count-name { color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .stat-count-num {
+    font-family: "SF Mono", Menlo, monospace;
+    font-weight: 600;
+  }
+
+  .save-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-2);
+    padding: 16px 0;
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* Tab */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .tab {
+    padding: 10px 16px;
+    cursor: pointer;
+    color: var(--text-2);
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Alerts panel */
+  .alerts-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .alert-item {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    transition: border-color 0.15s;
+  }
+  .alert-item.pending { border-left: 3px solid var(--accent-2); }
+  .alert-item.confirmed { border-left: 3px solid var(--green); opacity: 0.7; }
+  .alert-item.dismissed { border-left: 3px solid var(--text-3); opacity: 0.5; }
+  .alert-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .alert-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .alert-time {
+    color: var(--text-3);
+    font-size: 11px;
+    font-family: "SF Mono", Menlo, monospace;
+  }
+  .alert-msg {
+    color: var(--text);
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .alert-detail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+  }
+  .alert-detail-item {
+    background: var(--bg-2);
+    padding: 6px 10px;
+    border-radius: 4px;
+  }
+  .alert-detail-item .lbl { color: var(--text-3); font-size: 10px; }
+  .alert-detail-item .val { font-family: "SF Mono", Menlo, monospace; font-weight: 600; }
+  .alert-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .alert-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .alert-btn.confirm {
+    background: var(--green);
+    color: #0a0a0b;
+  }
+  .alert-btn.confirm:hover { background: #16a34a; }
+  .alert-btn.dismiss {
+    background: var(--bg-2);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+  }
+  .alert-btn.dismiss:hover { background: var(--border); color: var(--text); }
+  .alert-btn.play {
+    background: var(--accent-2);
+    color: white;
+  }
+  .alert-status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .alert-status-badge.pending { background: rgba(255,138,61,0.2); color: var(--accent-2); }
+  .alert-status-badge.confirmed { background: rgba(34,197,94,0.2); color: var(--green); }
+  .alert-status-badge.dismissed { background: rgba(107,114,128,0.2); color: var(--text-2); }
+
+  /* Recordings */
+  .recordings-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .recording-item {
+    background: var(--bg-3);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .recording-video {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    display: block;
+  }
+  .recording-meta {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .recording-name {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    Study Monitor
+  </div>
+  <div class="status-bar">
+    <span><span class="status-dot" id="dot-monitor"></span>监控: <span id="txt-monitor">未运行</span></span>
+    <span><span class="status-dot" id="dot-go2rtc"></span>Go2rtc</span>
+    <button class="btn" id="btn-refresh" onclick="refreshAll()">🔄 刷新</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">📊 实时</div>
+    <div class="tab" data-tab="config">⚙️ 配置</div>
+    <div class="tab" data-tab="logs">📝 日志</div>
+  </div>
+
+  <!-- ── 实时面板 ── -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="card">
+      <h2>当前状态 <span class="badge" id="state-time">--</span></h2>
+      <div class="state-display">
+        <div class="state-main">
+          <div class="state-emoji" id="state-emoji">😐</div>
+          <div class="state-label" id="state-label">加载中</div>
+          <div class="state-meta" id="state-meta"></div>
+          <div class="state-confidence" id="state-confidence" style="display:none">置信度 0%</div>
+        </div>
+        <div class="state-metrics">
+          <div class="metric">
+            <span class="metric-label">👁 眼睛 EAR</span>
+            <span class="metric-value" id="m-ear">--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">↔ 头部偏转 (yaw)</span>
+            <span class="metric-value" id="m-yaw">--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">⬆ 头部俯仰</span>
+            <span class="metric-value" id="m-pitch">--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">🏃 运动量</span>
+            <span class="metric-value" id="m-move">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>实时画面 <span class="badge">持续推送</span></h2>
+      <div class="btn-row" style="margin-bottom: 12px;">
+        <button class="btn primary" id="btn-start" onclick="startMonitor()">▶ 启动监控</button>
+        <button class="btn danger" id="btn-stop" onclick="stopMonitor()">⏹ 停止监控</button>
+      </div>
+      <div class="btn-row" style="margin-bottom: 12px; font-size: 12px;">
+        <button class="btn" onclick="ptzControl('left')">⬅️ 左转</button>
+        <button class="btn" onclick="ptzControl('right')">➡️ 右转</button>
+        <button class="btn" onclick="ptzControl('up')">⬆️ 上转</button>
+        <button class="btn" onclick="ptzControl('down')">⬇️ 下转</button>
+        <button class="btn" onclick="ptzControl('stop')">⏹ 停止</button>
+      </div>
+      <img class="snapshot" id="snapshot" src="" alt="摄像头画面">
+    </div>
+
+    <div class="card">
+      <h2>🚨 待审核告警 <span class="badge" id="alerts-pending-count">0</span></h2>
+      <div class="alerts-toolbar">
+        <select class="select" id="alerts-filter" onchange="refreshAlerts()">
+          <option value="pending">待审核</option>
+          <option value="confirmed">已确认</option>
+          <option value="dismissed">已忽略</option>
+          <option value="all">全部</option>
+        </select>
+        <span class="hint">💡 弟弟做出对应行为时，系统会触发录制 + 通知。你来决定是否要播报。</span>
+      </div>
+      <div class="alerts-list" id="alerts-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>🎬 录制视频 <span class="badge" id="recording-count">0</span></h2>
+      <div class="recordings-list" id="recordings-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>专注度统计 <span class="badge" id="stats-period">最近 1 小时</span></h2>
+      <div class="stats-toolbar">
+        <select class="select" id="stats-range" onchange="refreshStats()">
+          <option value="0.5">最近 30 分钟</option>
+          <option value="1" selected>最近 1 小时</option>
+          <option value="3">最近 3 小时</option>
+          <option value="24">今天</option>
+          <option value="168">最近 7 天</option>
+        </select>
+        <span class="stats-range-info" id="stats-range-info">--</span>
+      </div>
+      <div class="stats-big" id="stats-big"></div>
+      <div class="stats-section">
+        <div class="stats-section-title">各状态时长</div>
+        <div class="stats-bars" id="stats-bars"></div>
+      </div>
+      <div class="stats-section">
+        <div class="stats-section-title">各状态次数</div>
+        <div class="stats-counts" id="stats-counts"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 配置面板 ── -->
+  <div class="tab-content" id="tab-config">
+    <div class="card">
+      <h2>状态检测 <span class="badge">启用哪些状态会被识别</span></h2>
+      <div id="cfg-states"></div>
+    </div>
+
+    <div class="card">
+      <h2>判断阈值 <span class="badge">触发条件的数值</span></h2>
+      <div id="cfg-thresholds"></div>
+    </div>
+
+    <div class="card">
+      <h2>告警时长 <span class="badge">状态持续多久后提醒</span></h2>
+      <div id="cfg-alerts"></div>
+    </div>
+
+    <div class="card">
+      <h2>语音提醒 <span class="badge">edge-tts 微软晓晓</span></h2>
+      <div class="control-row">
+        <span class="control-label">启用语音提醒</span>
+        <div class="switch" id="cfg-voice-enabled" data-key="voice.enabled"></div>
+      </div>
+      <div class="control-row">
+        <span class="control-label">声优</span>
+        <select class="select" id="cfg-voice-name" data-key="voice.name">
+          <option value="zh-CN-XiaoxiaoNeural">晓晓（女·温柔）</option>
+          <option value="zh-CN-YunxiNeural">云希（男·阳光）</option>
+          <option value="zh-CN-YunyangNeural">云扬（男·专业）</option>
+          <option value="zh-CN-XiaoyiNeural">晓伊（女·甜）</option>
+          <option value="zh-CN-YunjianNeural">云健（男·播音）</option>
+          <option value="zh-CN-XiaohanNeural">晓涵（女·新闻）</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <span class="control-label">同类提醒冷却（秒）</span>
+        <input type="number" class="input medium" id="cfg-voice-cooldown" data-key="voice.cooldown" min="0">
+      </div>
+      <div class="group-title">各状态的提醒文案</div>
+      <div id="cfg-voice-messages"></div>
+    </div>
+
+    <div class="card">
+      <h2>监控源</h2>
+      <div class="control-row">
+        <span class="control-label">RTSP 地址</span>
+        <input type="text" class="input" id="cfg-rtsp" data-key="monitor.rtsp" style="width:300px">
+      </div>
+      <div class="control-row">
+        <span class="control-label">分析间隔（秒）</span>
+        <input type="number" class="input small" id="cfg-interval" data-key="monitor.check_interval" min="1">
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn" onclick="loadConfig()">放弃修改</button>
+      <button class="btn primary" onclick="saveConfig()">💾 保存配置</button>
+    </div>
+  </div>
+
+  <!-- ── 日志面板 ── -->
+  <div class="tab-content" id="tab-logs">
+    <div class="card">
+      <h2>实时日志 <span class="badge" id="log-count">0 条</span></h2>
+      <table class="log-table" id="log-table">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>状态</th>
+            <th>持续</th>
+            <th>眼 EAR</th>
+            <th>偏转</th>
+            <th>运动</th>
+            <th>置信</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATE_META = {
+  studying:     {emoji: "📚", label: "学习中",       color: "var(--green)"},
+  looking_down: {emoji: "👀", label: "看桌面/发呆",  color: "var(--blue)"},
+  look_away:    {emoji: "🙄", label: "注意力分散",    color: "var(--purple)"},
+  drowsy:       {emoji: "😴", label: "打瞌睡/闭眼",  color: "var(--red)"},
+  sleeping:     {emoji: "😪", label: "趴着睡觉",      color: "var(--red)"},
+  phone:        {emoji: "📱", label: "疑似玩手机",    color: "var(--accent-2)"},
+  idle:         {emoji: "😐", label: "发呆",          color: "var(--yellow)"},
+  moving:       {emoji: "🪑", label: "动来动去",      color: "var(--yellow)"},
+  away:         {emoji: "🚶", label: "离开座位",      color: "var(--text-2)"},
+  init:         {emoji: "⏳", label: "初始化中",      color: "var(--text-2)"},
+};
+
+const THRESHOLD_META = {
+  HEAD_DOWN_THRESHOLD:    {label: "低头阈值（鼻子Y）", min: 0.3, max: 0.9, step: 0.05, hint: "越大越不容易判趴着"},
+  BODY_GONE_THRESHOLD:    {label: "离开阈值（肩膀Y）", min: 0.05, max: 0.4, step: 0.05, hint: "越小越不容易判离开"},
+  HAND_BELOW_DESK:       {label: "手在桌下阈值",      min: 0.5, max: 0.9, step: 0.05, hint: "越大越不容易判玩手机"},
+  MOVEMENT_THRESHOLD:     {label: "运动阈值",          min: 0.02, max: 0.2, step: 0.01, hint: "越大越不容易判动来动去"},
+  HEAD_YAW_THRESHOLD:    {label: "转头阈值",          min: 0.05, max: 0.3, step: 0.01, hint: "越大越不容易判看别处"},
+  EYE_CLOSED_THRESHOLD:   {label: "闭眼阈值 (EAR)",   min: 0.08, max: 0.25, step: 0.01, hint: "越小越敏感"},
+  EYE_DROWSY_THRESHOLD:   {label: "半闭眼阈值 (EAR)", min: 0.15, max: 0.3, step: 0.01, hint: "越小越敏感"},
+};
+
+const ALERT_META = {
+  DROWSY_ALERT_AFTER:    {label: "打瞌睡告警",  unit: "秒", hint: "闭眼持续多久后提醒"},
+  LOOK_AWAY_ALERT_AFTER: {label: "看别处告警",  unit: "秒"},
+  SLEEP_ALERT_AFTER:     {label: "趴睡告警",    unit: "秒"},
+  PHONE_ALERT_AFTER:     {label: "玩手机告警",  unit: "秒"},
+  IDLE_ALERT_AFTER:      {label: "发呆告警",    unit: "秒"},
+  AWAY_ALERT_AFTER:      {label: "离开告警",    unit: "秒"},
+  MOVING_ALERT_AFTER:    {label: "动来动去告警", unit: "秒"},
+};
+
+let config = {};
+let currentState = null;
+
+function $(id) { return document.getElementById(id); }
+function $all(sel) { return document.querySelectorAll(sel); }
+
+function toast(msg, type="ok") {
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {
+    headers: {"Content-Type": "application/json"},
+    ...opts,
+  });
+  return r.json();
+}
+
+function switchTab(name) {
+  $all(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  $all(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
+}
+
+$all(".tab").forEach(t => {
+  t.addEventListener("click", () => switchTab(t.dataset.tab));
+});
+
+// ─── 状态 ───
+async function refreshStatus() {
+  const s = await api("/api/status");
+  const dot = $("dot-monitor");
+  const txt = $("txt-monitor");
+  if (s.running) {
+    dot.className = "status-dot running";
+    txt.textContent = `运行中 (PID ${s.pid})`;
+  } else {
+    dot.className = "status-dot";
+    txt.textContent = "未运行";
+  }
+
+  const st = s.current_state;
+  if (!st) {
+    $("state-emoji").textContent = "⏳";
+    $("state-label").textContent = "暂无数据";
+    $("state-meta").textContent = "等待监控启动...";
+    return;
+  }
+  currentState = st;
+  const meta = STATE_META[st.status] || STATE_META.init;
+  $("state-emoji").textContent = meta.emoji;
+  $("state-label").textContent = meta.label;
+  $("state-meta").textContent = `持续 ${formatDuration(st.duration_seconds)} · ${st.timestamp}`;
+  $("state-confidence").textContent = `置信度 ${Math.round(st.confidence * 100)}%`;
+  $("state-confidence").style.display = "inline-block";
+  $("state-time").textContent = st.timestamp;
+
+  $("m-ear").textContent = st.eye_ear.toFixed(3);
+  $("m-ear").className = "metric-value" + (st.eyes_closed ? " danger" : "");
+  $("m-yaw").textContent = (st.head_yaw >= 0 ? "+" : "") + st.head_yaw.toFixed(3);
+  $("m-yaw").className = "metric-value" + (Math.abs(st.head_yaw) > 0.1 ? " warn" : "");
+  $("m-pitch").textContent = st.head_pitch_ratio.toFixed(3);
+  $("m-move").textContent = st.movement_level.toFixed(4);
+  $("m-move").className = "metric-value" + (st.movement_level > 0.08 ? " warn" : "");
+}
+
+function formatDuration(s) {
+  if (s < 60) return `${s}秒`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}分${sec}秒`;
+}
+
+// ─── 控制 ───
+async function startMonitor() {
+  const r = await api("/api/start", {method: "POST"});
+  toast(r.ok ? "✓ 已启动" : r.message, r.ok ? "ok" : "err");
+  refreshStatus();
+}
+async function stopMonitor() {
+  const r = await api("/api/stop", {method: "POST"});
+  toast(r.ok ? "✓ 已停止" : r.message, r.ok ? "ok" : "err");
+  refreshStatus();
+}
+async function refreshSnapshot() {
+  // 使用 MJPEG 持续流，不需要手动刷新
+  const img = $("snapshot");
+  if (!img.src || !img.src.includes("/api/snapshot/auto")) {
+    img.src = "/api/snapshot/auto?t=" + Date.now();
+  }
+}
+
+// ─── 配置 ───
+async function loadConfig() {
+  config = await api("/api/config");
+  renderConfig();
+}
+
+function renderConfig() {
+  // States
+  const states = config.detection.enabled_states;
+  const statesHtml = Object.entries(STATE_META)
+    .filter(([k]) => k !== "init")
+    .map(([k, m]) => `
+      <div class="control-row">
+        <span class="control-label">${m.emoji} ${m.label}</span>
+        <div class="switch ${states[k] ? "on" : ""}" data-state="${k}"></div>
+      </div>`).join("");
+  $("cfg-states").innerHTML = statesHtml;
+
+  // Thresholds
+  const thHtml = Object.entries(THRESHOLD_META).map(([key, m]) => {
+    const v = Number(config.thresholds[key]).toFixed(3);
+    return `
+      <div class="control-row">
+        <span class="control-label">${m.label} <span class="control-info">${m.hint}</span></span>
+        <input type="number" class="input small" data-threshold="${key}" value="${v}"
+               min="${m.min}" max="${m.max}" step="${m.step}">
+      </div>`;
+  }).join("");
+  $("cfg-thresholds").innerHTML = thHtml;
+
+  // Alerts
+  const alHtml = Object.entries(ALERT_META).map(([key, m]) => `
+    <div class="control-row">
+      <span class="control-label">${m.label} <span class="control-info">${m.hint || ""}</span></span>
+      <span><input type="number" class="input small" data-alert="${key}" value="${config.alert_seconds[key]}" min="0"> ${m.unit}</span>
+    </div>`).join("");
+  $("cfg-alerts").innerHTML = alHtml;
+
+  // Voice
+  $("cfg-voice-enabled").classList.toggle("on", config.voice.enabled);
+  $("cfg-voice-name").value = config.voice.name;
+  $("cfg-voice-cooldown").value = config.voice.cooldown;
+
+  const msgsHtml = Object.entries(config.voice.messages).map(([k, v]) => {
+    const meta = STATE_META[k] || {emoji: "🔔", label: k};
+    return `
+      <div class="control-row">
+        <span class="control-label">${meta.emoji} ${meta.label} <span class="control-info">(${k})</span></span>
+      </div>
+      <textarea class="textarea" data-msg="${k}">${v}</textarea>`;
+  }).join("");
+  }).join("");
+  $("cfg-voice-messages").innerHTML = msgsHtml;
+
+  // Monitor
+  $("cfg-rtsp").value = config.monitor.rtsp;
+  $("cfg-interval").value = config.monitor.check_interval;
+}
+
+$("cfg-states").addEventListener("click", e => {
+  if (e.target.classList.contains("switch")) {
+    const k = e.target.dataset.state;
+    const cur = e.target.classList.toggle("on");
+    config.detection.enabled_states[k] = cur;
+  }
+});
+
+$("cfg-voice-enabled").addEventListener("click", e => {
+  e.currentTarget.classList.toggle("on");
+});
+
+async function saveConfig() {
+  // 收集 thresholds
+  $all("[data-threshold]").forEach(el => {
+    config.thresholds[el.dataset.threshold] = parseFloat(el.value);
+  });
+  // 收集 alerts
+  $all("[data-alert]").forEach(el => {
+    config.alert_seconds[el.dataset.alert] = parseInt(el.value);
+  });
+  // 收集语音
+  config.voice.enabled = $("cfg-voice-enabled").classList.contains("on");
+  config.voice.name = $("cfg-voice-name").value;
+  config.voice.cooldown = parseInt($("cfg-voice-cooldown").value);
+  $all("[data-msg]").forEach(el => {
+    config.voice.messages[el.dataset.msg] = el.value;
+  });
+  // 监控源
+  config.monitor.rtsp = $("cfg-rtsp").value;
+  config.monitor.check_interval = parseInt($("cfg-interval").value);
+
+  const r = await api("/api/config", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
+  toast(r.ok ? "✓ 已保存（重启监控后生效）" : "保存失败", r.ok ? "ok" : "err");
+}
+
+// ─── 日志 ───
+async function refreshLogs() {
+  const r = await api("/api/logs?limit=50");
+  const tb = $("log-tbody");
+  tb.innerHTML = r.map(e => {
+    const dt = e.timestamp;
+    const statusClass = STATE_META[e.status]?.emoji || "";
+    return `<tr>
+      <td class="log-time">${dt.split(" ")[1] || dt}</td>
+      <td><span class="log-status ${e.status}">${statusClass} ${e.status}</span></td>
+      <td>${formatDuration(e.duration_seconds)}</td>
+      <td>${e.eye_ear?.toFixed(3) || '--'}</td>
+      <td>${(e.head_yaw >= 0 ? "+" : "") + (e.head_yaw?.toFixed(3) || '--')}</td>
+      ${e.movement_level?.toFixed(4) || '--'}</td>
+      <td>${e.hand_movement?.toFixed(3) || '--'}</td>
+      <td>${Math.round((e.confidence || 0) * 100)}%</td>
+    </tr>`;
+  }).join("");
+  $("log-count").textContent = `${r.length} 条`;
+}
+
+// ─── 统计 ───
+async function refreshStats() {
+  const hours = parseFloat($("stats-range").value);
+  const r = await api(`/api/stats?hours=${hours}`);
+  if (!r.total_entries) {
+    $("stats-big").innerHTML = '<div class="stat" style="grid-column: span 4;"><div class="stat-value">--</div><div class="stat-label">暂无数据</div></div>';
+    $("stats-bars").innerHTML = "";
+    $("stats-counts").innerHTML = "";
+    $("stats-range-info").textContent = "0 条日志";
+    return;
+  }
+
+  // 时间范围
+  const totalMin = Math.round(r.total_duration_sec / 60);
+  $("stats-range-info").textContent = `${r.time_range.from.split(" ")[1]} ~ ${r.time_range.to.split(" ")[1]} · ${r.total_entries} 条 · 总时长 ${totalMin} 分钟`;
+
+  // 大卡片
+  $("stats-big").innerHTML = `
+    <div class="stat" style="grid-column: span 2;">
+      <div class="stat-value" style="color: var(--green); font-size: 32px;">${r.focus_score}%</div>
+      <div class="stat-label">专注度（学习占比）</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">${r.transitions}</div>
+      <div class="stat-label">状态切换次数</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">${totalMin}m</div>
+      <div class="stat-label">总监测时长</div>
+    </div>
+  `;
+
+  // 各状态时长（按时间长到短排序）
+  const durations = Object.entries(r.by_status)
+    .sort((a, b) => b[1].duration_sec - a[1].duration_sec);
+  const maxDuration = Math.max(...durations.map(([, v]) => v.duration_sec), 1);
+
+  const STATE_COLORS = {
+    studying:     "var(--green)",
+    looking_down: "var(--blue)",
+    look_away:    "var(--purple)",
+    drowsy:       "var(--red)",
+    sleeping:     "var(--red)",
+    phone:        "var(--accent-2)",
+    idle:         "var(--yellow)",
+    moving:       "var(--yellow)",
+    away:         "var(--text-2)",
+  };
+
+  $("stats-bars").innerHTML = durations.map(([k, v]) => {
+    const meta = STATE_META[k] || {emoji: "•"};
+    const pct = (v.duration_sec / maxDuration * 100).toFixed(0);
+    const min = Math.floor(v.duration_sec / 60);
+    const sec = v.duration_sec % 60;
+    const timeStr = min > 0 ? `${min}m${sec}s` : `${sec}s`;
+    return `<div class="stat-bar">
+      <div class="stat-bar-label">${meta.emoji} ${k}</div>
+      <div class="stat-bar-track">
+        <div class="stat-bar-fill" style="width:${pct}%; background:${STATE_COLORS[k] || "var(--text-2)"};"></div>
+      </div>
+      <div class="stat-bar-time">${timeStr}</div>
+    </div>`;
+  }).join("");
+
+  // 各状态次数
+  $("stats-counts").innerHTML = durations.map(([k, v]) => {
+    const meta = STATE_META[k] || {emoji: "•"};
+    return `<div class="stat-count">
+      <span class="stat-count-name">${meta.emoji} ${k}</span>
+      <span class="stat-count-num">${v.count}次</span>
+    </div>`;
+  }).join("");
+}
+
+// ─── 告警审核 ───
+async function refreshAlerts() {
+  const filter = $("alerts-filter").value;
+  const alerts = await api(`/api/alerts?status=${filter}&limit=30`);
+
+  if (alerts.length === 0) {
+    $("alerts-list").innerHTML = `<div class="hint" style="text-align:center; padding: 20px;">暂无${filter === "pending" ? "待审核" : ""}告警</div>`;
+    $("alerts-pending-count").textContent = "0";
+    return;
+  }
+
+  // 更新待审核数量（独立于当前过滤器）
+  const allPending = await api("/api/alerts?status=pending&limit=100");
+  $("alerts-pending-count").textContent = allPending.length;
+
+  $("alerts-list").innerHTML = alerts.map(a => {
+    const meta = STATE_META[a.status] || {emoji: "🔔"};
+    const ss = a.study_state || {};
+    const statusBadge = `<span class="alert-status-badge ${a.status_}">${a.status_ === "pending" ? "待审核" : a.status_ === "confirmed" ? "已播报" : "已忽略"}</span>`;
+    const recordingPath = a.recording?.path || "";
+
+    return `<div class="alert-item ${a.status_}" data-id="${a.id}">
+      <div class="alert-head">
+        <div class="alert-title">
+          ${meta.emoji} ${a.status}
+          ${statusBadge}
+        </div>
+        <div class="alert-time">${a.timestamp}</div>
+      </div>
+      <div class="alert-msg">💬 ${a.alert_msg}</div>
+      <div class="alert-detail">
+        <div class="alert-detail-item"><div class="lbl">持续</div><div class="val">${a.duration_seconds}s</div></div>
+        <div class="alert-detail-item"><div class="lbl">眼 EAR</div><div class="val">${(ss.eye_ear || 0).toFixed(3)}</div></div>
+        <div class="alert-detail-item"><div class="lbl">头偏转</div><div class="val">${(ss.head_yaw >= 0 ? "+" : "") + (ss.head_yaw || 0).toFixed(3)}</div></div>
+        <div class="alert-detail-item"><div class="lbl">手部动作</div><div class="val">${(ss.hand_movement || 0).toFixed(3)}</div></div>
+        <div class="alert-detail-item"><div class="lbl">眨眼频率</div><div class="val">${ss.blink_rate || 0}/min</div></div>
+        <div class="alert-detail-item"><div class="lbl">置信度</div><div class="val">${Math.round((ss.confidence || 0) * 100)}%</div></div>
+      </div>
+      <div class="alert-actions">
+        ${a.status_ === "pending" ? `
+          <button class="alert-btn confirm" onclick="confirmAlert('${a.id}')">✅ 确认播报</button>
+          <button class="alert-btn dismiss" onclick="dismissAlert('${a.id}')">❌ 忽略</button>
+        ` : ''}
+        ${recordingPath ? `<button class="alert-btn play" onclick="playRecording('${recordingPath.replace(/\\/g, "\\\\")}')">▶ 看录像</button>` : ''}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function confirmAlert(id) {
+  const r = await api(`/api/alerts/${id}/confirm`, {method: "POST"});
+  toast(r.ok ? "✓ 已播报语音提醒" : "失败", r.ok ? "ok" : "err");
+  refreshAlerts();
+}
+
+async function dismissAlert(id) {
+  const r = await api(`/api/alerts/${id}/dismiss`, {method: "POST"});
+  toast(r.ok ? "✓ 已忽略" : "失败", r.ok ? "ok" : "err");
+  refreshAlerts();
+}
+
+function playRecording(path) {
+  // path 是文件路径，转成 web URL
+  const filename = path.split(/[/\\]/).pop();
+  window.open(`/recordings/${filename}`, "_blank");
+}
+
+// ─── 云台控制 ───
+async function ptzControl(direction) {
+  const r = await api("/api/camera/ptz", {
+    method: "POST",
+    body: JSON.stringify({direction: direction, angle: 5})
+  });
+  toast(r.ok ? `✓ 云台转向: ${direction}` : r.message, r.ok ? "ok" : "err");
+}
+
+// ─── 录制视频 ───
+async function refreshRecordings() {
+  const r = await api("/api/recordings");
+  $("recording-count").textContent = r.length;
+
+  if (r.length === 0) {
+    $("recordings-list").innerHTML = '<div class="hint" style="text-align:center; padding: 20px;">还没有录制。告警触发时会自动保存前后各 15 秒。</div>';
+    return;
+  }
+
+  $("recordings-list").innerHTML = r.map(f => `
+    <div class="recording-item">
+      <video class="recording-video" controls preload="metadata" src="${f.url}"></video>
+      <div class="recording-meta">
+        <div class="recording-name">${f.filename}</div>
+        <div>${f.size_mb} MB · ${new Date(f.modified).toLocaleString("zh-CN")}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+// ─── 启动 ───
+async function refreshAll() {
+  await Promise.all([refreshStatus(), refreshLogs(), refreshStats(), checkGo2rtc(),
+                     refreshAlerts(), refreshRecordings()]);
+  refreshSnapshot();
+}
+async function checkGo2rtc() {
+  try {
+    const r = await api("/api/go2rtc/status");
+    const dot = $("dot-go2rtc");
+    dot.className = "status-dot " + (r.running ? "running" : "error");
+  } catch (e) {
+    $("dot-go2rtc").className = "status-dot error";
+  }
+}
+
+(async function init() {
+  await loadConfig();
+  await refreshAll();
+  setInterval(refreshAll, 3000);  // 每3秒刷新
+})();
+</script>
+
+</body>
+</html>

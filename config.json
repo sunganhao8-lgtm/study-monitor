@@ -1,0 +1,53 @@
+{
+  "alert_seconds": {
+    "AWAY_ALERT_AFTER": 30,
+    "DROWSY_ALERT_AFTER": 5,
+    "IDLE_ALERT_AFTER": 60,
+    "LOOK_AWAY_ALERT_AFTER": 10,
+    "MOVING_ALERT_AFTER": 120,
+    "PHONE_ALERT_AFTER": 20,
+    "SLEEP_ALERT_AFTER": 30
+  },
+  "detection": {
+    "enabled_states": {
+      "away": true,
+      "drowsy": true,
+      "idle": true,
+      "look_away": true,
+      "looking_down": true,
+      "moving": true,
+      "phone": true,
+      "sleeping": true,
+      "studying": true
+    }
+  },
+  "monitor": {
+    "check_interval": 2,
+    "rtsp": "rtsp://localhost:8554/xiaomi_camera4"
+  },
+  "thresholds": {
+    "BODY_GONE_THRESHOLD": 0.15,
+    "EYE_CLOSED_THRESHOLD": 0.15,
+    "EYE_DROWSY_THRESHOLD": 0.22,
+    "HAND_BELOW_DESK": 0.75,
+    "HEAD_DOWN_THRESHOLD": 0.65,
+    "HEAD_YAW_THRESHOLD": 0.1,
+    "MOVEMENT_THRESHOLD": 0.08
+  },
+  "version": 2,
+  "voice": {
+    "cooldown": 30,
+    "enabled": true,
+    "messages": {
+      "away": "弟弟，你离开座位太久了，快回来。",
+      "drowsy": "弟弟，你眼睛闭上了，要打瞌睡了吗？赶紧起来活动一下。",
+      "idle": "弟弟，你发呆了很久了，要继续学习哦。",
+      "look_away": "弟弟，你的注意力不在学习上，专心一点。",
+      "looking_down": "弟弟，你在看什么呢？请抬起头专心学习。",
+      "moving": "弟弟，专心一点，坐好继续学习。",
+      "phone": "弟弟，现在是学习时间，不要玩手机了。",
+      "sleeping": "弟弟，你趴着睡觉了，起来清醒一下再继续学习吧。"
+    },
+    "name": "zh-CN-XiaoxiaoNeural"
+  }
+}
