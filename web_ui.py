@@ -540,8 +540,9 @@ def _miio_send_command(ip, token_hex, method, params):
 
 
 def control_camera_ptz(direction="stop", angle=5):
-    """控制摄像头云台"""
+    """控制摄像头云台（带超时重试）"""
     ip = "192.168.1.159"
+    # 实际生产应从 config.json 读取 token
     token = "65657353534a73626155626663655675"
     direction_map = {
         "up": ("set_motor", [0, angle]),
@@ -551,7 +552,15 @@ def control_camera_ptz(direction="stop", angle=5):
         "stop": ("set_motor", [4, 0]),
     }
     method, params = direction_map.get(direction, ("set_motor", [4, 0]))
-    return _miio_send_command(ip, token, method, params)
+    # 重试 3 次
+    last_err = None
+    for attempt in range(3):
+        result = _miio_send_command(ip, token, method, params)
+        if isinstance(result, dict) and "error" not in result:
+            return {"ok": True, "attempt": attempt+1, "result": result}
+        last_err = result.get("error", "unknown") if isinstance(result, dict) else "unknown"
+        time.sleep(0.3)
+    return {"ok": False, "error": f"重试 3 次仍失败: {last_err}", "hint": "摄像头可能离线或 token 过期，访问 http://localhost:1984 重新登录"}
 
 
 
