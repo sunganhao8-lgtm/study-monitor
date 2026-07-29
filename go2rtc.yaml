@@ -1,8 +1,8 @@
 log:
-  level: info
+  level: debug
 
 streams:
   xiaomi_camera4: "xiaomi://2273641469:cn@192.168.1.159?did=1213560681&model=xiaomi.camera.082ac1&proto=cs2+tcp"
 
 xiaomi:
-  "2273641469": "V1:pwROAesIuzMBPe5slLSsQh3pu6hEEUT4Y3adx9rRiEW1izGiPMVWZ9v6lE3W/mEVtKWg0N1DpJSbXWRxf637s1eiy5W3ek1SAVju0vOZtumPzD/RXVKw9N1WlC9Nyda6q3H+PUiSwyl+Kt8lg/qtHrP+wxZy1v0g2gVsLq8EumceTgTk2OyGQ8gDM9jrwvQE2UYPBUbnuDOKQspEyplvgd1gM6GtAwJscOyyIZmD0oj+iVcmhpMAOMbfLke/McRzjllegbAQVPeo3VzN7hVdhkMt4DDSPR0aLXVE75z8CDU="
+  "2273641469": V1:pwROAesIuzMBPe5slLSsQqL3G8S8XkIngBsHdC/x/zgVY1ljzRjKYibIEsHI3AhrUOqojsaVy8Tr+T16Pvjg5NvMUVjhYBPqwoz1qd73Vb1Fw+ugmYa7P2pduvRBPrPbKAlEds4InD4d0NSYvlPGST7pgR/fBtoJc9jXQGnkZi6l5AmXJC61yIF8K1XYRu+d+68cidnqwJ0cekk+qx9hUW7LvdLP/eCLv+vh+gypSf8fy7uurfqMN/Z3ZPSwC0QSJAsNBo/3pvqx8IO0GeFD68fHG1He5eJeAw2yksYfrr8=
