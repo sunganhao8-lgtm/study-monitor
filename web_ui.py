@@ -1,3 +1,21 @@
+
+def http_get_if_running(url):
+    try:
+        r = urlopen(url, timeout=1)
+        return r.status == 200
+    except Exception:
+        return None
+
+def open_rtsp():
+    try:
+        import cv2
+        cap = cv2.VideoCapture("rtsp://localhost:8554/xiaomi_camera4")
+        ok = cap.isOpened() and cap.read()[0]
+        cap.release()
+        return ok
+    except Exception:
+        return False
+
 """
 Study Monitor - Web UI 后端
 ===========================
@@ -534,6 +552,18 @@ def control_camera_ptz(direction="stop", angle=5):
     }
     method, params = direction_map.get(direction, ("set_motor", [4, 0]))
     return _miio_send_command(ip, token, method, params)
+
+
+
+
+@app.route("/api/health")
+def api_health():
+    """健康检查"""
+    return jsonify({
+        "ok": True,
+        "go2rtc": bool(http_get_if_running("http://localhost:1984/api/streams")),
+        "rtsp": bool(open_rtsp()),
+    })
 
 
 # ─── 启动 ─────────────────────────────────────────────

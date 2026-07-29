@@ -209,11 +209,14 @@ class VideoRecorder:
     def push_frame(self, frame):
         """持续往缓冲区塞帧"""
         self.buffer.append(frame.copy())
-        # 如果在录像，继续写入
-        if self.recording and self.current_writer is not None:
-            self.current_writer.write(frame)
-            self.post_frames_remaining -= 1
-            if self.post_frames_remaining <= 0:
+        if self.recording and hasattr(self, "_writer") and self._writer is not None:
+            try:
+                self._writer.write(frame)
+                self.post_frames_remaining -= 1
+                if self.post_frames_remaining <= 0:
+                    self._stop_recording()
+            except Exception as e:
+                print(f"\n[录像] 写帧失败: {e}")
                 self._stop_recording()
 
     def trigger(self, alert_type: str, alert_msg: str, study_state: dict):
@@ -226,13 +229,16 @@ class VideoRecorder:
         path = os.path.join(self.output_dir, filename)
 
         h, w = self.buffer[0].shape[:2] if self.buffer else (480, 848)
-        # 用 avc1 (H.264) FourCC，浏览器 <video> 可以直接播放
+        # 用 mp4v（兼容性最好），浏览器录播 HEVC 需要转码
+        # 优先尝试 H.264 (avc1)，fallback 到 mp4v
         fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        # 备选：找不到 avc1 编码器时回退到 mp4v
         writer = cv2.VideoWriter(path, fourcc, self.fps, (w, h))
         if not writer.isOpened():
+            # cv2 的 mp4v 写的也是 H.264 兼容帧，浏览器通常能播
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             writer = cv2.VideoWriter(path, fourcc, self.fps, (w, h))
+        self._path = path
+        self._writer = writer
 
         # 先写缓冲区
         for f in self.buffer:
