@@ -1,117 +1,89 @@
 # Study Monitor 📚
 
-基于小米摄像头 + MediaPipe Pose 的学习状态监控系统。
+基于小米摄像头 + MediaPipe Pose/Face + Audio VAD 的多维度学习状态监控系统。
 
 ## 功能
 
-- 实时读取小米摄像头视频流（通过 Micam RTSP 桥接）
-- 人体关键点提取（MediaPipe Pose，33个关键点）
-- 自动判断学习状态：✅学习 / 😴趴着 / 📱玩手机 / 🚶离开 / 🪑动来动去
-- 状态日志记录（JSONL格式）
-- 超时告警（趴着>5分钟 / 玩手机>2分钟 / 离开>1分钟）
+- 实时读取小米摄像头视频流（通过 go2rtc cs2+tcp 协议）
+- **9 种行为状态识别**：学习中 / 打瞌睡/闭眼 / 趴着睡 / 看别处 / 看桌面 / 玩手机 / 发呆 / 动来动去 / 离开
+- **多维度检测**：
+  - 🧍 身体姿态（MediaPipe Pose，33关键点）
+  - 👁 眼睛开合度（动态EAR基线校准）
+  - 🧠 头部朝向（yaw/pitch）
+  - ✋ 手部运动量（写字/翻书检测）
+  - 🔊 人声检测（ffmpeg RMS VAD，读题目 = 学习中）
+- **人工审核告警**：每个告警需要你确认才播报语音（edge-tts 微软晓晓）
+- **自动视频录制**：告警触发前后各 15 秒存档
+- **云台控制**：低置信度自动扫描 + Web UI 手动方向按钮
+- **Web 配置面板**：所有参数可视化调整（阈值/时长/声优/提醒文案）
+- **统计概览**：各状态时长条形图 + 次数分布 + 专注度评分
 
 ## 架构
 
 ```
-小米摄像头 ──WiFi──→ Miloco(拉流) → Micam(桥接) → Go2rtc(RTSP)
-                                                        ↓
-                                          Python study_monitor.py
-                                          MediaPipe Pose → 行为判断 → 日志
+小米摄像头(192.168.1.159)
+    ↓ cs2+tcp P2P
+go2rtc (Windows 原生)
+    ↓ RTSP
+study_monitor.py ─┬─ MediaPipe Pose → posture
+                  ├─ MediaPipe Face → eyes/yaw/pitch
+                  ├─ ffmpeg VAD → speech
+                  ├─ VideoRecorder → MP4
+                  └─ AudioMonitor → speech detection
+    ↓ HTTP API
+web_ui.py (Flask) + ui.html → 浏览器控制面板
 ```
 
 ## 快速开始
 
-### 1. 启动 Docker 服务
+### 前置条件
+
+- Windows 10+ / macOS / Linux
+- Python 3.11+
+- ffmpeg + ffplay（在 PATH 中）
+- go2rtc（Windows：`D:\study-monitor\go2rtc_bin\go2rtc.exe`）
+- 小米账号（用于 go2rtc 登录）
+- 摄像头和电脑在同一局域网
+
+### 安装
 
 ```bash
 cd D:\study-monitor
-
-# 编辑 .env 填写配置（见下方说明）
-notepad .env
-
-# 启动
-docker-compose up -d
-```
-
-### 2. 获取摄像头 DID
-
-1. 浏览器打开 `https://localhost:8000`（Miloco WebUI，自签证书，点"高级→继续访问"）
-2. 设置密码（和 .env 里的 MILOCO_PASSWORD 一致）
-3. 绑定你的小米账号
-4. 在设备列表里找到摄像头的 DID（数字ID）
-5. 把 DID 填入 .env 的 `CAMERA_ID`
-6. 重启：`docker-compose restart micam1`
-
-### 3. 验证 RTSP 流
-
-- Go2rtc WebUI: `http://localhost:1984`
-- 用 VLC 播放: `rtsp://localhost:8554/stream1`
-
-### 4. 启动监控
-
-```bash
-# 安装依赖
 pip install -r requirements.txt
-
-# 启动（调试模式，有画面）
-python study_monitor.py --debug
-
-# 后台运行（无窗口）
-python study_monitor.py --no-display
 ```
 
-或者直接双击 `start.bat`。
+### 启动
 
-## .env 配置说明
-
-| 变量 | 说明 | 默认值 |
-|---|---|---|
-| MILOCO_PASSWORD | Miloco WebUI 密码 | study123456 |
-| CAMERA_ID | 摄像头DID（数字ID） | 需要填写 |
-| RTSP_URL | RTSP推流地址 | rtsp://localhost:8554/stream1 |
-| VIDEO_CODEC | 编码格式 | hevc（小米4双摄用H.265） |
-| STREAM_CHANNEL | 流通道 | 0=主摄(广角) |
-
-## 双摄版特别说明
-
-小米智能摄像机4双摄版有两个镜头：
-- `STREAM_CHANNEL=0` → 主摄（广角，适合看整个房间）
-- `STREAM_CHANNEL=1` → 副摄（长焦，适合看桌面细节）
-
-建议先用主摄（0），视角更广。
-
-## 日志格式
-
-每条日志一行 JSON：
-
-```json
-{
-  "status": "studying",
-  "confidence": 0.85,
-  "head_y": 0.42,
-  "body_visible": true,
-  "left_hand_y": 0.55,
-  "right_hand_y": 0.58,
-  "timestamp": "2026-07-28 15:30:00",
-  "duration_seconds": 120
-}
+1. 启动 go2rtc：
+```bash
+./go2rtc_bin/go2rtc.exe -config go2rtc.yaml
 ```
 
-## 常见问题
+2. 打开 go2rtc WebUI `http://localhost:1984`，用小米账号登录，加载摄像头
 
-**Q: 摄像头连不上？**
-- 确认 Docker 三个容器都在运行：`docker-compose ps`
-- 确认 Miloco WebUI 能打开：`https://localhost:8000`
-- 确认已绑定小米账号且摄像头在线
+3. 启动 Web 面板：
+```bash
+python web_ui.py
+```
 
-**Q: RTSP 流卡顿？**
-- 局域网内一般 1-3 秒延迟，正常
-- 如果很卡，把 VIDEO_CODEC 从 hevc 改成 h264 试试
+4. 浏览器访问 `http://localhost:8765`，点击 **▶ 启动监控**
 
-**Q: 关键点检测不准？**
-- 摄像头角度建议斜上方 45° 俯拍，能看到人上半身
-- 光线要够，太暗会影响检测
-- 模型复杂度可在代码里调（model_complexity: 0=快但不准，2=准但慢）
+或者双击 `start.bat` 一键启动。
 
-**Q: 想接飞书通知？**
-- 在 `study_monitor.py` 的 `should_alert` 函数里加飞书 Webhook 调用即可
+## 文件说明
+
+| 文件 | 作用 |
+|---|---|
+| `study_monitor.py` | 核心监控脚本（姿态/面部/音频分析） |
+| `web_ui.py` | Flask Web 后端（API + 告警审核 + 云台控制） |
+| `ui.html` | 单文件 Web 前端（仪表盘/配置/日志） |
+| `go2rtc.yaml` | go2rtc 流媒体配置 |
+| `config.json` | UI 配置（阈值/告警/声优/提醒文案） |
+| `.env` | 摄像头 DID 和密码（私密，不上传 GitHub） |
+
+## 注意事项
+
+- `.env` 中的 `CAMERA_ID` 和 `MILOCO_PASSWORD` 是私密信息
+- 录制视频存于 `recordings/` 目录（每个文件约 3-5 MB）
+- 日志存于 `logs/` 目录（JSONL 格式）
+- 首次启动 MediaPipe 需要下载模型文件（~8 MB，自动下载）
