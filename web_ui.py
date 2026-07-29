@@ -40,6 +40,10 @@ import signal
 import struct
 import socket
 import hashlib
+# Network capabilities cache
+_miot_ping_ts = 0
+_miot_ping_ok = True
+
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, Response
@@ -540,10 +544,19 @@ def _miio_send_command(ip, token_hex, method, params):
 
 
 def control_camera_ptz(direction="stop", angle=5):
-    """控制摄像头云台（带超时重试）"""
+    """控制摄像头云台（带超时重试+token 健康检查）"""
+    global _miot_ping_ts, _miot_ping_ok
     ip = "192.168.1.159"
-    # 实际生产应从 config.json 读取 token
     token = "65657353534a73626155626663655675"
+
+    # 先做一次 miio ping（get_device_info），5 秒内不重复
+    now = time.time()
+    if now - _miot_ping_ts > 5:
+        ping = _miio_send_command(ip, token, "get_device_info", [])
+        _miot_ping_ok = not (isinstance(ping, dict) and "error" in ping)
+        _miot_ping_ts = now
+        if not _miot_ping_ok:
+            print(f"[PTZ] miio token 失效（{ping.get('error')}）。需要用户在 http://localhost:1984 重新登录小米账号。")
     direction_map = {
         "up": ("set_motor", [0, angle]),
         "down": ("set_motor", [1, angle]),
@@ -552,6 +565,10 @@ def control_camera_ptz(direction="stop", angle=5):
         "stop": ("set_motor", [4, 0]),
     }
     method, params = direction_map.get(direction, ("set_motor", [4, 0]))
+    # Token 健康检查失败直接返回明确错误
+    if not _miot_ping_ok:
+        return {"ok": False, "error": "miio_token_invalid", "hint": "摄像头 token 过期。请在 http://localhost:1984 重新登录小米账号。"}
+
     # 重试 3 次
     last_err = None
     for attempt in range(3):
