@@ -854,7 +854,7 @@ async function refreshStatus() {
   }
 
   const st = s.current_state;
-  if (!st) {
+  if (!st || !st.status) {
     $("state-emoji").textContent = "⏳";
     $("state-label").textContent = "暂无数据";
     $("state-meta").textContent = "等待监控启动...";
