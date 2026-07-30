@@ -53,9 +53,9 @@
   "vlm": {
     "enabled": true,
     "provider": "ollama",
-    "model": "minicpm-v:8b",
+    "model": "qwen3-vl:8b",
     "endpoint": "http://localhost:11434",
-    "interval": 8,
-    "timeout": 30
+    "interval": 12,
+    "timeout": 60
   }
 }

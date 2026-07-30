@@ -392,8 +392,9 @@ class StudyState:
 
 
 class VLMAnalyzer:
-    """异步 VLM 推理：在后台线程调用 Ollama，避免阻塞 MediaPipe 主循环。
-    analyze() 立即返回上次结果（缓存）。
+    """异步 VLM 推理：调用 local llama-server（Ollama 兼容 API）。
+    analyze() 立即返回上次结果（缓存），不阻塞主循环。
+    支持：Ollama /api/generate（旧的） + llama-server /v1/chat/completions（OpenAI 风格）。
     """
     def __init__(self):
         self.last_call = 0.0
@@ -401,8 +402,19 @@ class VLMAnalyzer:
         self.last_raw = ""
         self.last_latency = 0.0
         self._lock = threading.Lock()
-        self._pending_frame = None  # frame to send next call
+        self._pending_frame = None
         self._stop = False
+        # 选 API 风格：provider=openai 走 /v1/chat/completions（推荐，支持多模态标准），
+        # provider=ollama 走 /api/generate
+        cfg = {}
+        try:
+            cfg_path = os.path.join(SCRIPT_DIR, "config.json")
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f).get("vlm", {})
+        except Exception:
+            pass
+        self.api_style = "openai" if cfg.get("provider") in ("openai", "llama", "llama-server") else "ollama"
+        self.model_name = cfg.get("model", "minicpm-v:8b")
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -424,7 +436,7 @@ class VLMAnalyzer:
                 payload = {
                     "model": VLM_MODEL, "prompt": VLM_PROMPT,
                     "images": [b64], "stream": False,
-                    "options": {"temperature": 0.0, "num_predict": 2},
+                    "options": {"temperature": 0.0, "num_predict": 1500},
                 }
                 req = Request(f"{VLM_ENDPOINT}/api/generate",
                               data=json.dumps(payload).encode(),

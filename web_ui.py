@@ -186,12 +186,23 @@ def api_status():
     cfg = state.load_config()
     is_running = state.process is not None and state.process.poll() is None
 
+    vlm_info = {}
+    if latest and isinstance(latest, dict):
+        dbg = latest.get("debug_info") or {}
+        vlm_info = {
+            "state": dbg.get("vlm_state"),
+            "raw": dbg.get("vlm_raw"),
+            "latency": dbg.get("vlm_latency"),
+        }
+
     return jsonify({
         "running": is_running,
         "pid": state.process.pid if is_running else None,
         "started_at": state.started_at,
         "current_state": latest,
         "rtsp": cfg["monitor"]["rtsp"],
+        "vlm": vlm_info,
+        "vlm_enabled": cfg.get("vlm", {}).get("enabled", False),
     })
 
 
