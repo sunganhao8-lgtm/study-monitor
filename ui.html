@@ -106,7 +106,7 @@ body {
 .dot.off { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 
 /* ─── Layout ─── */
-.container { max-width: 1320px; margin: 0 auto; padding: 24px; }
+.container { max-width: 1320px; margin: 0 auto; padding: 24px; overflow-x: hidden; }
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
@@ -607,6 +607,30 @@ body {
         </div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">VLM 视觉大模型 <span class="badge">高精度识别（GPU）</span></div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">启用 VLM</span>
+        <div class="switch" id="cfg-vlm-enabled" data-key="vlm.enabled"></div>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">模型</span>
+        <input class="ctrl-input" id="cfg-vlm-model" data-key="vlm.model" value="minicpm-v:8b" style="width:160px">
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">API 端点</span>
+        <input class="ctrl-input" id="cfg-vlm-endpoint" data-key="vlm.endpoint" value="http://localhost:11434" style="width:200px">
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">推理间隔（秒）</span>
+        <input type="number" class="ctrl-input" id="cfg-vlm-interval" data-key="vlm.interval" value="8" min="3" max="60" style="width:60px">
+      </div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.5">
+        💡 VLM 通过 Ollama 调用本地视觉大模型（如 MiniCPM-V 8B），每 N 秒分析一帧图像，输出语义化的行为分类。
+        比 MediaPipe 几何判断更准确（能识别"看桌面发呆"vs"看桌面在写字"）。
+        需要先安装：<code>ollama pull minicpm-v:8b</code>（约 5.5GB）
+      </div>
+    </div>
   </div>
   <div class="cfg-save-bar">
     <button class="btn" onclick="loadConfig()">取消</button>
@@ -820,6 +844,12 @@ async function saveConfig(){
   }
   config.monitor.rtsp=$("cfg-rtsp").value;
   config.monitor.check_interval=parseInt($("cfg-interval").value);
+  // VLM
+  if (!config.vlm) config.vlm = {};
+  config.vlm.enabled = $("cfg-vlm-enabled").classList.contains("on");
+  config.vlm.model = $("cfg-vlm-model").value;
+  config.vlm.endpoint = $("cfg-vlm-endpoint").value;
+  config.vlm.interval = parseInt($("cfg-vlm-interval").value);
   const r=await api("/api/config",{method:"POST",body:JSON.stringify(config)});
   toast(r.ok?"已保存（重启后生效）":"失败",r.ok?"ok":"err");
 }

@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import urllib.request
+from urllib.request import urlopen, Request
 import math
 import threading
 from datetime import datetime
@@ -87,6 +88,29 @@ PTZ_SCAN_SEQUENCE = [
     ("left", 3),
     ("stop", 0),
 ]
+
+# ─── VLM 视觉大模型（高精度识别）────────────────
+VLM_ENABLED = False           # 总开关
+VLM_PROVIDER = "ollama"       # "ollama" 或 "none"
+VLM_MODEL = "minicpm-v:8b"   # Ollama 模型名
+VLM_ENDPOINT = "http://localhost:11434"
+VLM_INTERVAL = 8              # 每 N 秒分析一次（VLM ~3s/次）
+VLM_TIMEOUT = 30              # 单次推理超时
+VLM_FIRST_TIMEOUT = 120        # 首次模型加载超时（冷启动慢）
+VLM_PROMPT = "Answer ONLY one digit 1-10. 1=focus/studying 2=looking_down 3=look_away 4=drowsy/eyes_closed 5=sleeping_on_desk 6=phone 7=idle 8=moving 9=empty 10=uncertain"
+# VLM 状态映射（数字 → 内部状态名）
+VLM_STATE_MAP = {
+    "1": "studying",
+    "2": "looking_down",
+    "3": "look_away",
+    "4": "drowsy",
+    "5": "sleeping",
+    "6": "phone",
+    "7": "idle",
+    "8": "moving",
+    "9": "away",
+    "10": "uncertain",
+}
 
 # ─── 日志 ───
 LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
@@ -366,7 +390,96 @@ class StudyState:
     debug_info: dict = field(default_factory=dict)
 
 
-# ─── 多维度分析器 ──────────────────────────────────────
+
+class VLMAnalyzer:
+    """异步 VLM 推理：在后台线程调用 Ollama，避免阻塞 MediaPipe 主循环。
+    analyze() 立即返回上次结果（缓存）。
+    """
+    def __init__(self):
+        self.last_call = 0.0
+        self.last_state = None
+        self.last_raw = ""
+        self.last_latency = 0.0
+        self._lock = threading.Lock()
+        self._pending_frame = None  # frame to send next call
+        self._stop = False
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
+
+    def _worker(self):
+        """后台线程：每 VLM_INTERVAL 秒调一次 Ollama"""
+        while not self._stop:
+            time.sleep(VLM_INTERVAL)
+            with self._lock:
+                frame = self._pending_frame
+                self._pending_frame = None
+            if frame is None:
+                continue
+            t0 = time.time()
+            timeout = VLM_FIRST_TIMEOUT if self.last_call == 0 else VLM_TIMEOUT
+            try:
+                b64 = self._encode_jpeg(frame)
+                if b64 is None:
+                    continue
+                payload = {
+                    "model": VLM_MODEL, "prompt": VLM_PROMPT,
+                    "images": [b64], "stream": False,
+                    "options": {"temperature": 0.0, "num_predict": 2},
+                }
+                req = Request(f"{VLM_ENDPOINT}/api/generate",
+                              data=json.dumps(payload).encode(),
+                              headers={"Content-Type": "application/json"},
+                              method="POST")
+                resp = urlopen(req, timeout=timeout)
+                data = json.loads(resp.read())
+                raw = data.get("response", "").strip()
+                latency = time.time() - t0
+                # 解析数字
+                import re as _re
+                m = _re.search(r"\d+", raw)
+                if m:
+                    state = VLM_STATE_MAP.get(m.group(0), "uncertain")
+                else:
+                    state = "uncertain"
+                with self._lock:
+                    self.last_call = t0
+                    self.last_state = state
+                    self.last_raw = raw
+                    self.last_latency = latency
+                # 写日志
+                try:
+                    _log = os.path.join(SCRIPT_DIR, "logs", "vlm.log")
+                    with open(_log, "a", encoding="utf-8") as _f:
+                        _f.write(f"[{time.strftime('%H:%M:%S')}] {latency:.1f}s -> {raw!r}\n")
+                except Exception: pass
+            except Exception as e:
+                # 写异常日志
+                try:
+                    _log = os.path.join(SCRIPT_DIR, "logs", "vlm.log")
+                    with open(_log, "a", encoding="utf-8") as _f:
+                        _f.write(f"[{time.strftime('%H:%M:%S')}] ERROR: {e}\n")
+                except Exception: pass
+
+    def analyze(self, frame):
+        """非阻塞：把 frame 喂给 worker，立即返回上次结果"""
+        with self._lock:
+            self._pending_frame = frame.copy()
+            return self.last_state, self.last_raw, self.last_latency
+
+    def _encode_jpeg(self, frame, quality=70):
+        """帧编码 JPEG + base64，控制大小减少 token"""
+        h, w = frame.shape[:2]
+        # 压缩到 480p 减少 token（VLM 对清晰度要求不高）
+        if max(h, w) > 640:
+            scale = 640 / max(h, w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            return None
+        import base64
+        return base64.b64encode(buf.tobytes()).decode("ascii")
+
+
 class BehaviorAnalyzer:
     """综合姿态 + 面部 + 运动量的多维度分析器"""
 
@@ -413,6 +526,26 @@ class BehaviorAnalyzer:
         self.baseline_ear = 0.35      # 睁眼时 EAR 基线（动态校准）
         self.pose_idle_counter = 0    # 姿态稳定帧计数
         self.ear_stable_counter = 0   # EAR 持续闭眼帧计数
+
+        # 可选：VLM 高层语义识别
+        self.vlm = None
+        if VLM_ENABLED:
+            # 尝试从 config.json 读取（如果存在）
+            try:
+                cfg_path = os.path.join(SCRIPT_DIR, "config.json")
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_vlm = json.load(f).get("vlm", {})
+            except Exception:
+                cfg_vlm = {}
+            if cfg_vlm.get("enabled", True) and cfg_vlm.get("provider", "ollama") != "none":
+                try:
+                    self.vlm = VLMAnalyzer()
+                    endpoint = cfg_vlm.get("endpoint", VLM_ENDPOINT)
+                    model = cfg_vlm.get("model", VLM_MODEL)
+                    interval = cfg_vlm.get("interval", VLM_INTERVAL)
+                    print(f"[VLM] 已启用: {model} @ {endpoint} 每 {interval}s 推理一次")
+                except Exception as e:
+                    print(f"[VLM] 初始化失败: {e}")
 
     def analyze(self, frame, timestamp_ms: int) -> StudyState:
         """综合分析一帧"""
@@ -528,7 +661,14 @@ class BehaviorAnalyzer:
         avg_movement = sum(self.movement_history) / max(len(self.movement_history), 1)
 
         # ── 6. 综合状态判断 ──
-        status, confidence, debug_info = self._judge_status(
+        # VLM 语义识别（可选）
+        vlm_state = None
+        vlm_raw = ""
+        vlm_latency = 0.0
+        if getattr(self, "vlm", None) is not None:
+            vlm_state, vlm_raw, vlm_latency = self.vlm.analyze(frame)
+
+        status, confidence, _dbg = self._judge_status(
             body_visible=body_visible,
             head_y=head_y,
             hands_below=left_hand_y > HAND_BELOW_DESK and right_wrist_y > HAND_BELOW_DESK,
@@ -539,7 +679,12 @@ class BehaviorAnalyzer:
             avg_movement=avg_movement,
             hand_movement=hand_movement,
             blink_rate=self.blink_count_window,
+            vlm_state=vlm_state,
         )
+        debug_info = dict(_dbg or {})
+        debug_info["vlm_state"] = vlm_state
+        debug_info["vlm_raw"] = vlm_raw
+        debug_info["vlm_latency"] = round(vlm_latency, 2)
 
         self._update_state(status)
 
@@ -565,11 +710,23 @@ class BehaviorAnalyzer:
     def _judge_status(self, body_visible, head_y, hands_below,
                       head_yaw, head_pitch_ratio, eye_ear,
                       eyes_closed, avg_movement, hand_movement=0.0,
-                      blink_rate=0):
+                      blink_rate=0, vlm_state=None):
         """综合判断状态
-        优先级：离开 > 看别处 > 玩手机 > 闭眼(分情况) > 趴着 > 发呆 > 学习中
-        关键修复：闭眼时如果有手部动作或正常眨眼 → 不是打瞌睡（可能是眨眼/思考）
+        优先级：VLM (语义) > MediaPipe (几何)
+        VLM 返回时优先采用，置信度高。
         """
+
+        # ── VLM 优先：只信任 9 种状态，排除 uncertain ──
+        if vlm_state and vlm_state != "uncertain":
+            # VLM 看到没人 → 强制 away（不管 MediaPipe）
+            if vlm_state == "away":
+                return "away", 0.92, {"reason": "vlm: away"}
+            # VLM 明确判断 → 用 VLM，置信度 0.85
+            confidence = 0.85
+            # 如果 VLM 说 studying 但 MediaPipe 显示明显的 "看别处"，降到 0.7
+            if vlm_state == "studying" and abs(head_yaw) > 0.15:
+                confidence = 0.65
+            return vlm_state, confidence, {"reason": f"vlm: {vlm_state}"}
         debug = {
             "head_y": round(head_y, 3),
             "head_yaw": round(head_yaw, 3),
@@ -791,6 +948,25 @@ def log_alert(alert_record: dict, log_file: str):
 
 
 def main():
+    import sys
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+    # 从 config.json 读取运行时配置（覆盖默认常量）
+    try:
+        cfg_path = os.path.join(SCRIPT_DIR, "config.json")
+        with open(cfg_path, "r", encoding="utf-8") as _f:
+            _cfg = json.load(_f)
+        vlm_cfg = _cfg.get("vlm", {})
+        if vlm_cfg.get("enabled"):
+            globals()["VLM_ENABLED"] = True
+            globals()["VLM_MODEL"] = vlm_cfg.get("model", VLM_MODEL)
+            globals()["VLM_ENDPOINT"] = vlm_cfg.get("endpoint", VLM_ENDPOINT)
+            globals()["VLM_INTERVAL"] = vlm_cfg.get("interval", VLM_INTERVAL)
+            globals()["VLM_TIMEOUT"] = vlm_cfg.get("timeout", VLM_TIMEOUT)
+            print(f"[VLM] 从 config.json 启用: {VLM_MODEL} @ {VLM_ENDPOINT}")
+    except Exception as e:
+        print(f"[VLM] config.json 读取失败: {e}")
+
     parser = argparse.ArgumentParser(description="学习状态监控 v2")
     parser.add_argument("--rtsp", default=DEFAULT_RTSP, help="RTSP 流地址")
     parser.add_argument("--debug", action="store_true", help="显示可视化调试窗口")
@@ -836,11 +1012,30 @@ def main():
 
     try:
         while True:
+            # 用 timeout 强制不等（cv2 不支持，但用计数器跳过）
+            # 关键：如果上一帧花了太久，跳过这次 analyze（但仍保留帧缓存给 VLM）
+            import time as _t
+            _t0 = _t.time()
             ret, frame = cap.read()
+            _read_dt = _t.time() - _t0
+            if _read_dt > 3:
+                # RTSP 卡住 — 用上次的 frame 或者跳过
+                if _read_dt > 8:
+                    # 完全卡死，重连
+                    print(f"⚠️ RTSP read {_read_dt:.1f}s 卡死，重连...")
+                    cap.release()
+                    _t.sleep(3)
+                    cap = cv2.VideoCapture(args.rtsp)
+                    continue
+                # 3-8s 慢：复用上一帧
+                if "frame" in dir() and frame is not None:
+                    pass  # 用上一帧
+                else:
+                    continue
             if not ret:
                 print("⚠️ 读帧失败，重连...")
                 cap.release()
-                time.sleep(3)
+                _t.sleep(3)
                 cap = cv2.VideoCapture(args.rtsp)
                 continue
 

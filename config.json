@@ -49,5 +49,13 @@
       "sleeping": "弟弟，你趴着睡觉了，起来清醒一下再继续学习吧。"
     },
     "name": "zh-CN-XiaoxiaoNeural"
+  },
+  "vlm": {
+    "enabled": true,
+    "provider": "ollama",
+    "model": "minicpm-v:8b",
+    "endpoint": "http://localhost:11434",
+    "interval": 8,
+    "timeout": 30
   }
 }
