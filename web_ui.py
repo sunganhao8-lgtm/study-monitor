@@ -345,11 +345,11 @@ def api_alert_dismiss(alert_id):
 
 @app.route("/api/recordings")
 def api_recordings():
-    """列出所有录制的视频"""
+    """列出录制的视频（最多 12 个，避免前端创建过多 <video> 元素）"""
     if not RECORDING_DIR.exists():
         return jsonify([])
     files = []
-    for f in sorted(RECORDING_DIR.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True):
+    for f in sorted(RECORDING_DIR.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True)[:12]:
         files.append({
             "filename": f.name,
             "size_mb": round(f.stat().st_size / 1024 / 1024, 2),

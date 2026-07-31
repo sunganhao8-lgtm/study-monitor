@@ -508,8 +508,28 @@ body {
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">实时画面 <span class="badge">持续推送</span></div>
+  <div class="card" id="card-vlm" style="display:none">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:18px">🤖</span>
+        <span style="color:var(--text-2)">VLM 视觉语义：</span>
+        <span id="vlm-state-text" style="font-weight:600;color:var(--blue)">--</span>
+        <span style="color:var(--text-3);font-size:11px;margin-left:auto" id="vlm-latency-text"></span>
+      </div>
+      <div id="vlm-diag" style="display:flex;gap:18px;margin-top:10px;font-size:11px;color:var(--text-3);flex-wrap:wrap">
+        <span>🧠 模型: <span id="vlm-model-name">--</span></span>
+        <span>📦 显存: <span id="vlm-vram">--</span></span>
+        <span>🔢 调用次数: <span id="vlm-calls">0</span></span>
+        <span>🕐 上次: <span id="vlm-last-ts">--</span></span>
+        <span>📝 上次输出: <span id="vlm-last-raw" style="font-family:var(--mono)">--</span></span>
+        <span id="vlm-status-dot" style="margin-left:auto">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f05a5a"></span>
+          <span id="vlm-status-text">未连接</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">实时画面 <span class="badge">持续推送</span></div>
     <div class="feed-controls">
       <button class="btn primary" onclick="monitorStart()">▶ 启动</button>
       <button class="btn danger" onclick="monitorStop()">⏹ 停止</button>
