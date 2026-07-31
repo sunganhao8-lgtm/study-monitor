@@ -681,7 +681,7 @@ function switchTab(n){
   document.querySelectorAll(".tab-content").forEach(c=>c.classList.toggle("active",c.id==="tab-"+n));
   if(n==="config")loadConfig();
   if(n==="logs")loadLogs();
-  if(n==="dashboard"){loadStatus();refreshSnapshot();}
+  if(n==="dashboard"){loadStatus();reloadSnapshot();}
 }
 document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll(".nav-tab").forEach(t=>{
@@ -718,6 +718,28 @@ async function loadStatus(){
   updateEyes(st.eye_ear||0.30,st.eyes_closed);
 }
 
+// ─── VLM diagnostic ───
+function updateVlmDiag(diag){
+  if (!diag) return;
+  $("vlm-model-name").textContent = diag.model || "(none)";
+  $("vlm-vram").textContent = diag.model_loaded_vram_gb ? diag.model_loaded_vram_gb.toFixed(1) + "GB" : "0GB";
+  $("vlm-calls").textContent = diag.calls_total || 0;
+  $("vlm-last-ts").textContent = diag.last_call_ts || "--";
+  $("vlm-last-raw").textContent = diag.last_raw || "--";
+  const dot = $("vlm-status-dot");
+  const txt = $("vlm-status-text");
+  if (dot && txt) {
+    const dotSpan = dot.querySelector("span");
+    if (diag.ollama_alive && diag.model) {
+      if (dotSpan) dotSpan.style.background = "#2ac76a";
+      txt.textContent = "已加载";
+    } else {
+      if (dotSpan) dotSpan.style.background = "#f05a5a";
+      txt.textContent = diag.ollama_error ? "错误" : "未连接";
+    }
+  }
+}
+
 function updateEyes(ear,closed){
   const el=document.querySelector(".eye-left"),er=document.querySelector(".eye-right"),
         pl=document.querySelector(".pupil-left"),pr=document.querySelector(".pupil-right");
@@ -729,6 +751,15 @@ function updateEyes(ear,closed){
 }
 
 // ─── Monitor Control ───
+async function reloadSnapshot(){
+  // 重新加载 MJPEG 帧（避免新 tab 切回时旧连接卡死）
+  const img = document.getElementById("snapshot");
+  if (img) {
+    const src = img.src.split("?")[0];
+    img.src = src + "?t=" + Date.now();
+  }
+}
+
 async function monitorStart(){const r=await api("/api/start",{method:"POST"});toast(r.ok?"已启动":r.message,r.ok?"ok":"err");loadStatus();}
 async function monitorStop(){const r=await api("/api/stop",{method:"POST"});toast(r.ok?"已停止":r.message,r.ok?"ok":"err");loadStatus();}
 async function ptz(d){const r=await api("/api/camera/ptz",{method:"POST",body:JSON.stringify({direction:d,angle:5})});toast(r.ok?"✓":r.message,r.ok?"ok":"err");}
@@ -879,7 +910,7 @@ async function loadRecordings(){
   const r=await api("/api/recordings");
   $("rec-count").textContent=r.length;
   $("rec-grid").innerHTML=r.length===0?'<span class="hint" style="padding:16px;text-align:center">暂无</span>'
-    :r.map(f=>`<div class="rec-item"><video controls preload="metadata" src="${f.url}"></video><div class="rec-meta"><div class="rec-name">${f.filename}</div><div>${f.size_mb}MB</div></div></div>`).join("");
+    :r.map(f=>`<div class="rec-item"><video controls preload="none" src="${f.url}"></video><div class="rec-meta"><div class="rec-name">${f.filename}</div><div>${f.size_mb}MB</div></div></div>`).join("");
 }
 
 // ─── Go2rtc ───
@@ -888,13 +919,35 @@ async function checkGo2rtc(){
 }
 
 // ─── Refresh ───
-async function refreshAll(){
-  await Promise.all([loadStatus(),loadLogs(),loadStats(),checkGo2rtc(),loadAlerts(),loadRecordings()]);
+// Staggered polling - 不同端点不同频率
+async function loadFast(){       // 高频 (3s)
+  await Promise.all([loadStatus(), checkGo2rtc()]);
 }
-setInterval(refreshAll,3000);
+async function loadMid(){        // 中频 (10s)
+  await Promise.all([loadLogs(), loadAlerts()]);
+}
+async function loadRecordingsRefresh(){  // 低频 (60s)
+  await loadRecordings();
+}
+async function loadSlow(){       // 低频 (60s)
+  await Promise.all([loadStats()]);
+}
+async function loadVlmDiag(){    // 独立 (8s) — VLM diag 单独跑
+  const diag = await api("/api/vlm/diag");
+  if (diag) updateVlmDiag(diag);
+}
+setInterval(loadFast, 3000);
+setInterval(loadMid, 10000);
+setInterval(loadSlow, 60000);
+setInterval(loadRecordingsRefresh, 60000);
+setInterval(loadVlmDiag, 8000);
 
 // Init
-(async function init(){await loadConfig();refreshAll();})();
+(async function init(){
+  await loadConfig();
+  // 初始并发加载所有数据
+  await Promise.all([loadFast(), loadMid(), loadSlow(), loadVlmDiag()]);
+})();
 </script>
 </body>
 </html>

@@ -50,6 +50,8 @@ from urllib.request import Request, urlopen
 from flask import Flask, jsonify, request, send_from_directory, Response
 
 SCRIPT_DIR = Path(__file__).parent
+_vlm_diag_cache = {}
+_vlm_diag_cache_ts = 0.0
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 LOG_PATH = SCRIPT_DIR / "logs" / "states.jsonl"
 ALERT_PATH = SCRIPT_DIR / "logs" / "alerts.jsonl"
@@ -591,9 +593,18 @@ def api_stream_status():
 
 @app.route("/api/vlm/diag")
 def api_vlm_diag():
-    """VLM 诊断信息：模型加载状态、上次推理、累计调用次数"""
+    """VLM 诊断信息：模型加载状态、上次推理、累计调用次数
+    缓存 5 秒（避免 6 个端点轮询时 Ollama /api/ps 调用过频）
+    """
     import json as _j
     import re as _re
+    import time as _t
+    global _vlm_diag_cache_ts, _vlm_diag_cache
+
+    now = _t.time()
+    if _vlm_diag_cache and now - _vlm_diag_cache_ts < 5:
+        return jsonify(_vlm_diag_cache)
+
     diag = {
         "ollama_alive": False,
         "model": None,
@@ -630,6 +641,9 @@ def api_vlm_diag():
         except Exception:
             pass
 
+    # 缓存结果（5 秒内复用）
+    _vlm_diag_cache = diag
+    _vlm_diag_cache_ts = _t.time()
     return jsonify(diag)
 
 

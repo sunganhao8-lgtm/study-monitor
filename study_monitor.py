@@ -94,7 +94,7 @@ VLM_ENABLED = False           # 总开关
 VLM_PROVIDER = "ollama"       # "ollama" 或 "none"
 VLM_MODEL = "minicpm-v:8b"   # Ollama 模型名
 VLM_ENDPOINT = "http://localhost:11434"
-VLM_INTERVAL = 8              # 每 N 秒分析一次（VLM ~3s/次）
+VLM_INTERVAL = 15             # 每 N 秒分析一次（Qwen3-VL thinking 慢）
 VLM_TIMEOUT = 30              # 单次推理超时
 VLM_FIRST_TIMEOUT = 120        # 首次模型加载超时（冷启动慢）
 VLM_PROMPT = (
@@ -451,7 +451,7 @@ class VLMAnalyzer:
                 payload = {
                     "model": VLM_MODEL, "prompt": VLM_PROMPT,
                     "images": [b64], "stream": False,
-                    "options": {"temperature": 0.0, "num_predict": 1500},
+                    "options": {"temperature": 0.0, "num_predict": 800},
                 }
                 req = Request(f"{VLM_ENDPOINT}/api/generate",
                               data=json.dumps(payload).encode(),
