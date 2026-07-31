@@ -97,7 +97,22 @@ VLM_ENDPOINT = "http://localhost:11434"
 VLM_INTERVAL = 8              # 每 N 秒分析一次（VLM ~3s/次）
 VLM_TIMEOUT = 30              # 单次推理超时
 VLM_FIRST_TIMEOUT = 120        # 首次模型加载超时（冷启动慢）
-VLM_PROMPT = "Answer ONLY one digit 1-10. 1=focus/studying 2=looking_down 3=look_away 4=drowsy/eyes_closed 5=sleeping_on_desk 6=phone 7=idle 8=moving 9=empty 10=uncertain"
+VLM_PROMPT = (
+    "You see a person (or empty chair). Reply with ONE digit:\n"
+    "1=studying (clearly reading/writing/thinking about book/notes)\n"
+    "2=looking_down (head down + HAND writing/moving OR holding something)\n"
+    "3=look_away (head turned to side/window)\n"
+    "4=drowsy (eyes half-closed/closed, yawning)\n"
+    "5=sleeping (face on desk, body still)\n"
+    "6=phone (HAND holding phone OR clearly looking at small screen)\n"
+    "7=idle (awake, doing nothing visible, just sitting)\n"
+    "8=moving (standing/walking/fidgeting)\n"
+    "9=empty (no person, empty chair or unrecognizable scene)\n"
+    "10=uncertain (too dark/blurry/can't tell)\n"
+    "IMPORTANT: If desk has NO books/notes/pen AND person just sits there → 7 (idle), NOT 2.\n"
+    "If NO person visible at all → 9.\n"
+    "Output ONLY the digit."
+)
 # VLM 状态映射（数字 → 内部状态名）
 VLM_STATE_MAP = {
     "1": "studying",

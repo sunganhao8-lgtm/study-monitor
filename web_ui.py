@@ -46,6 +46,7 @@ _miot_ping_ok = True
 
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.request import Request, urlopen
 from flask import Flask, jsonify, request, send_from_directory, Response
 
 SCRIPT_DIR = Path(__file__).parent
@@ -404,29 +405,81 @@ def api_stats():
 
 @app.route("/api/snapshot/auto")
 def api_snapshot_auto():
-    """持续推送截图（服务器推送）"""
+    """持续推送截图（服务器推送）
+    - quality=88 高清（监控视角，需要看清作业内容）
+    - 限帧率 ~10 fps（每帧 sleep 100ms，避免与 study_monitor 抢 RTSP 资源）
+    - 心跳/重连：如果 read 卡 3 秒以上，自动重连
+    - 加 server timestamp 防止浏览器缓存旧帧
+    """
     import cv2
-    import base64
+    import time as _t
 
     cfg = state.load_config()
     rtsp = cfg["monitor"]["rtsp"]
+    stream_id = int(_t.time() * 1000)
 
     def generate():
-        cap = cv2.VideoCapture(rtsp)
+        cap = None
+        last_reconnect = 0
+        frame_interval = 0.1  # 10 fps
+        read_timeout = 3.0    # 单帧 read 超时
+        frame_count = 0
         try:
             while True:
-                ret, frame = cap.read()
-                if ret:
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-                    yield (b"--frame\r\n"
-                           b"Content-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n")
-                else:
-                    cap.release()
-                    import time
-                    time.sleep(2)
+                if cap is None or not cap.isOpened():
+                    if _t.time() - last_reconnect < 1.5:
+                        _t.sleep(0.3)
+                        continue
+                    last_reconnect = _t.time()
+                    print(f"[mjpeg {stream_id}] reconnecting to {rtsp}")
                     cap = cv2.VideoCapture(rtsp)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if not cap.isOpened():
+                        _t.sleep(2)
+                        continue
+
+                t0 = _t.time()
+                ret, frame = cap.read()
+                read_dt = _t.time() - t0
+
+                if not ret:
+                    print(f"[mjpeg {stream_id}] read failed, reconnecting")
+                    cap.release()
+                    cap = None
+                    last_reconnect = _t.time()
+                    _t.sleep(0.5)
+                    continue
+
+                if read_dt > read_timeout:
+                    # 单帧超过 3 秒 → 摄像头在忙（被 study_monitor / 米家抢），重连
+                    print(f"[mjpeg {stream_id}] read {read_dt:.1f}s slow, re-cap")
+                    cap.release()
+                    cap = None
+                    last_reconnect = _t.time()
+                    continue
+
+                # 限帧率
+                _t.sleep(frame_interval)
+
+                # 编码 JPEG（quality=88 提高清晰度 + Content-Length 让浏览器立刻刷新）
+                ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
+                if not ok:
+                    continue
+
+                frame_count += 1
+                frame_count += 1
+                # multipart/x-mixed-replace 帧格式：每段以 CRLF 结束
+                CR = b"\x0d\x0a"
+                payload  = b"--frame" + CR
+                payload += b"Content-Type: image/jpeg" + CR
+                payload += b"Cache-Control: no-cache, no-store, must-revalidate" + CR
+                payload += b"Pragma: no-cache" + CR + CR
+                payload += buf.tobytes() + CR
+                yield payload
         finally:
-            cap.release()
+            if cap:
+                cap.release()
+            print(f"[mjpeg {stream_id}] closed after {frame_count} frames")
 
     return Response(generate(),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
@@ -534,6 +587,50 @@ def api_stream_status():
     return jsonify({
         "enabled": state.load_config().get("stream", {}).get("enabled", True)
     })
+
+
+@app.route("/api/vlm/diag")
+def api_vlm_diag():
+    """VLM 诊断信息：模型加载状态、上次推理、累计调用次数"""
+    import json as _j
+    import re as _re
+    diag = {
+        "ollama_alive": False,
+        "model": None,
+        "model_loaded_vram_gb": 0,
+        "last_call_ts": None,
+        "last_raw": None,
+        "last_latency": None,
+        "calls_total": 0,
+    }
+    try:
+        req = Request("http://localhost:11434/api/ps", method="GET")
+        resp = urlopen(req, timeout=3)
+        data = _j.loads(resp.read())
+        for m in data.get("models", []):
+            diag["model"] = m.get("name")
+            diag["model_loaded_vram_gb"] = m.get("size_vram", 0) / 1e9
+            break
+        diag["ollama_alive"] = True
+    except Exception as e:
+        diag["ollama_error"] = str(e)[:80]
+
+    vlm_log = SCRIPT_DIR / "logs" / "vlm.log"
+    if vlm_log.exists():
+        try:
+            log_lines = vlm_log.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
+            diag["calls_total"] = sum(1 for l in log_lines if "->" in l and "ERROR" not in l)
+            if log_lines:
+                last_line = log_lines[-1]
+                m = _re.search(r"\[([^\]]+)\] ([0-9.]+)s -> (.+)", last_line)
+                if m:
+                    diag["last_call_ts"] = m.group(1)
+                    diag["last_latency"] = float(m.group(2))
+                    diag["last_raw"] = m.group(3)
+        except Exception:
+            pass
+
+    return jsonify(diag)
 
 
 @app.route("/api/camera/ptz", methods=["POST"])
