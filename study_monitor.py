@@ -1024,6 +1024,16 @@ def main():
 
     try:
         while True:
+            # 检查视频流开关：如果用户关掉了，暂停读帧（米家可独占摄像头）
+            _stream_flag = os.path.join(SCRIPT_DIR, "logs", ".stream_disabled")
+            if os.path.exists(_stream_flag):
+                # 流开关关 — 等待 2 秒后重试（让米家能正常用摄像头）
+                _t.sleep(2)
+                if frame is None or _t.time() - last_log_time > 60:
+                    print("⏸ 视频推送已暂停（米家正在使用摄像头）...")
+                    last_log_time = _t.time()
+                continue
+
             # 用 timeout 强制不等（cv2 不支持，但用计数器跳过）
             # 关键：如果上一帧花了太久，跳过这次 analyze（但仍保留帧缓存给 VLM）
             import time as _t

@@ -828,6 +828,7 @@ async function loadConfig(){
   }).join("");
   $("cfg-rtsp").value=config.monitor.rtsp;
   $("cfg-interval").value=config.monitor.check_interval;
+  $("cfg-stream-enabled").classList.toggle("on", !!config.stream?.enabled);
 }
 
 function togState(k){const el=document.querySelector(`[onclick="togState('${k}')"]`);if(!el)return;const on=el.classList.toggle("on");if(config.detection)config.detection.enabled_states[k]=on;}

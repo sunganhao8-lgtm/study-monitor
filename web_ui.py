@@ -505,6 +505,37 @@ def api_go2rtc():
         return jsonify({"running": False, "message": str(e)})
 
 
+@app.route("/api/stream/toggle", methods=["POST"])
+def api_stream_toggle():
+    """暂停/恢复 study_monitor 的 RTSP 视频消费（让米家 App 能独占摄像头）"""
+    data = request.json or {}
+    enabled = bool(data.get("enabled", True))
+    cfg = state.load_config()
+    cfg["stream"] = cfg.get("stream", {})
+    cfg["stream"]["enabled"] = enabled
+    state.save_config(cfg)
+    # 通知 study_monitor 进程（如果跑着）
+    _notify_stream_change(enabled)
+    return jsonify({"ok": True, "enabled": enabled})
+
+
+def _notify_stream_change(enabled: bool):
+    """通过文件标记让 study_monitor 进程感知视频开关变化"""
+    flag_path = SCRIPT_DIR / "logs" / ".stream_disabled"
+    if enabled:
+        if flag_path.exists():
+            flag_path.unlink()
+    else:
+        flag_path.write_text("0", encoding="utf-8")
+
+
+@app.route("/api/stream/status")
+def api_stream_status():
+    return jsonify({
+        "enabled": state.load_config().get("stream", {}).get("enabled", True)
+    })
+
+
 @app.route("/api/camera/ptz", methods=["POST"])
 def api_camera_ptz():
     """控制摄像头云台转动"""
